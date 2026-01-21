@@ -48,9 +48,9 @@ data = load_data()
 
 class VerifyButton(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None)  # Persistente, non scade mai
+        super().__init__(timeout=None)
     
-    @discord.ui.button(label="✓ Verify", style=discord.ButtonStyle.gray, custom_id="verify_button_persistent")
+    @discord.ui.button(label="✓ Verify", style=discord.ButtonStyle.gray, custom_id="verify_btn_persistent")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         guild_id = str(interaction.guild.id)
@@ -64,7 +64,7 @@ class VerifyButton(discord.ui.View):
         
         embed = discord.Embed(
             title="🔐 Verification Required",
-            description=f"To verify and access **Axira**, click the link below:\n\n[**Click here to verify**]({oauth_url})\n\nAfter authorizing, you will automatically receive the **Verified** role!",
+            description=f"To verify and access **Axira**, click the link below:\n\n[**Click here to verify**]({oauth_url})\n\nAfter authorizing, you will receive the **Verified** role!",
             color=0x000000
         )
         embed.set_footer(text="Axira Verification System")
@@ -87,7 +87,7 @@ async def setupverify(interaction: discord.Interaction):
     
     view = VerifyButton()
     await interaction.channel.send(embed=embed, view=view)
-    await interaction.response.send_message("✅ Verification system setup! The button will work even after bot restarts.", ephemeral=True)
+    await interaction.response.send_message("✅ Verification system setup complete!", ephemeral=True)
 
 @tree.command(name="backup", description="Add all verified members to the server")
 async def backup(interaction: discord.Interaction):
@@ -163,10 +163,17 @@ async def backup(interaction: discord.Interaction):
     
     await message.edit(embed=embed)
 
+# Variabile per tracciare se il view è già stato aggiunto
+view_added = False
+
 @bot.event
 async def on_ready():
-    # Registra il view persistente - funziona anche dopo restart!
-    bot.add_view(VerifyButton())
+    global view_added
+    
+    # Aggiungi il view SOLO UNA VOLTA
+    if not view_added:
+        bot.add_view(VerifyButton())
+        view_added = True
     
     await tree.sync()
     print("="*60)
@@ -175,27 +182,27 @@ async def on_ready():
     print(f'🌐 Server URL: {RAILWAY_URL}')
     print(f'🔗 Redirect URI: {REDIRECT_URI}')
     print(f'🔧 Commands synced!')
-    print(f'💾 Verify buttons are persistent across restarts!')
+    print(f'💾 Verified users saved: {sum(len(users) for users in data["verified_users"].values())}')
     print("="*60)
 
 # Web server routes
 @app.route('/')
 def home():
-    return f"""
+    return """
     <!DOCTYPE html>
     <html>
     <head>
         <title>Axira Verification System</title>
         <meta charset="utf-8">
         <style>
-            * {{
+            * {
                 margin: 0;
                 padding: 0;
                 box-sizing: border-box;
-            }}
+            }
             
-            body {{
-                font-family: 'Segoe UI', Arial, sans-serif;
+            body {
+                font-family: 'Arial', sans-serif;
                 background: #000;
                 color: #fff;
                 display: flex;
@@ -204,101 +211,149 @@ def home():
                 height: 100vh;
                 overflow: hidden;
                 position: relative;
-            }}
+            }
             
-            /* Sfondo animato con particelle */
-            .snowflakes {{
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                pointer-events: none;
-                z-index: 0;
-            }}
-            
-            .snowflake {{
+            /* Neve animata */
+            .snowflake {
                 position: absolute;
                 top: -10px;
                 color: #fff;
-                font-size: 1em;
-                opacity: 0.8;
+                font-size: 1.5em;
+                opacity: 0.9;
                 animation: fall linear infinite;
-            }}
-            
-            @keyframes fall {{
-                to {{
-                    transform: translateY(100vh);
-                }}
-            }}
-            
-            .container {{
-                position: relative;
                 z-index: 1;
-                text-align: center;
-                background: rgba(26, 26, 26, 0.95);
-                padding: 60px 50px;
-                border-radius: 20px;
-                border: 2px solid #333;
-                box-shadow: 0 0 50px rgba(0, 255, 0, 0.4);
+            }
+            
+            @keyframes fall {
+                to {
+                    transform: translateY(100vh);
+                }
+            }
+            
+            /* Barra neon */
+            .neon-bar {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(255, 255, 255, 0.1);
                 backdrop-filter: blur(10px);
-            }}
+                border: 3px solid #fff;
+                border-radius: 20px;
+                padding: 60px 80px;
+                box-shadow: 
+                    0 0 20px rgba(255, 255, 255, 0.5),
+                    0 0 40px rgba(255, 255, 255, 0.3),
+                    inset 0 0 20px rgba(255, 255, 255, 0.1);
+                text-align: center;
+                z-index: 10;
+                animation: pulse-glow 2s ease-in-out infinite;
+            }
             
-            h1 {{
+            @keyframes pulse-glow {
+                0%, 100% {
+                    box-shadow: 
+                        0 0 20px rgba(255, 255, 255, 0.5),
+                        0 0 40px rgba(255, 255, 255, 0.3),
+                        inset 0 0 20px rgba(255, 255, 255, 0.1);
+                }
+                50% {
+                    box-shadow: 
+                        0 0 30px rgba(255, 255, 255, 0.7),
+                        0 0 60px rgba(255, 255, 255, 0.5),
+                        inset 0 0 30px rgba(255, 255, 255, 0.2);
+                }
+            }
+            
+            .star-pfp {
+                width: 120px;
+                height: 120px;
+                margin: 0 auto 30px;
+                filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.8));
+                animation: float 3s ease-in-out infinite;
+            }
+            
+            @keyframes float {
+                0%, 100% {
+                    transform: translateY(0px);
+                }
+                50% {
+                    transform: translateY(-15px);
+                }
+            }
+            
+            h1 {
                 color: #fff;
-                margin-bottom: 25px;
-                font-size: 42px;
-                text-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
-            }}
+                font-size: 32px;
+                text-transform: uppercase;
+                letter-spacing: 4px;
+                margin-bottom: 20px;
+                text-shadow: 
+                    0 0 10px rgba(255, 255, 255, 0.8),
+                    0 0 20px rgba(255, 255, 255, 0.6),
+                    0 0 30px rgba(255, 255, 255, 0.4);
+            }
             
-            .status {{
+            .status {
                 color: #00ff00;
+                font-size: 18px;
                 font-weight: bold;
-                font-size: 28px;
-                margin: 25px 0;
-                text-shadow: 0 0 15px rgba(0, 255, 0, 0.8);
-                animation: pulse 2s ease-in-out infinite;
-            }}
+                text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+            }
             
-            @keyframes pulse {{
-                0%, 100% {{ opacity: 1; }}
-                50% {{ opacity: 0.7; }}
-            }}
+            /* Stelline che passano */
+            .floating-star {
+                position: absolute;
+                font-size: 40px;
+                opacity: 0.8;
+                animation: float-across 15s linear infinite;
+                z-index: 5;
+            }
             
-            .info {{
-                color: #aaa;
-                font-size: 15px;
-                margin-top: 35px;
-                line-height: 1.8;
-            }}
-            
-            .info p {{
-                margin: 8px 0;
-            }}
+            @keyframes float-across {
+                0% {
+                    left: -100px;
+                    transform: rotate(0deg);
+                }
+                100% {
+                    left: calc(100% + 100px);
+                    transform: rotate(360deg);
+                }
+            }
         </style>
     </head>
     <body>
-        <!-- Particelle animate -->
-        <div class="snowflakes" aria-hidden="true">
-            <div class="snowflake" style="left: 10%; animation-duration: 10s; animation-delay: 0s;">❄</div>
-            <div class="snowflake" style="left: 20%; animation-duration: 8s; animation-delay: 1s;">❄</div>
-            <div class="snowflake" style="left: 30%; animation-duration: 12s; animation-delay: 0.5s;">❄</div>
-            <div class="snowflake" style="left: 40%; animation-duration: 9s; animation-delay: 2s;">❄</div>
-            <div class="snowflake" style="left: 50%; animation-duration: 11s; animation-delay: 1.5s;">❄</div>
-            <div class="snowflake" style="left: 60%; animation-duration: 10s; animation-delay: 0.8s;">❄</div>
-            <div class="snowflake" style="left: 70%; animation-duration: 13s; animation-delay: 1.2s;">❄</div>
-            <div class="snowflake" style="left: 80%; animation-duration: 8s; animation-delay: 0.3s;">❄</div>
-            <div class="snowflake" style="left: 90%; animation-duration: 9s; animation-delay: 1.8s;">❄</div>
-        </div>
+        <!-- Neve -->
+        <div class="snowflake" style="left: 10%; animation-duration: 10s; animation-delay: 0s;">❄</div>
+        <div class="snowflake" style="left: 20%; animation-duration: 8s; animation-delay: 1s;">❄</div>
+        <div class="snowflake" style="left: 30%; animation-duration: 12s; animation-delay: 0.5s;">❄</div>
+        <div class="snowflake" style="left: 40%; animation-duration: 9s; animation-delay: 2s;">❄</div>
+        <div class="snowflake" style="left: 50%; animation-duration: 11s; animation-delay: 1.5s;">❄</div>
+        <div class="snowflake" style="left: 60%; animation-duration: 10s; animation-delay: 0.8s;">❄</div>
+        <div class="snowflake" style="left: 70%; animation-duration: 13s; animation-delay: 1.2s;">❄</div>
+        <div class="snowflake" style="left: 80%; animation-duration: 8s; animation-delay: 0.3s;">❄</div>
+        <div class="snowflake" style="left: 90%; animation-duration: 9s; animation-delay: 1.8s;">❄</div>
         
-        <div class="container">
-            <h1>🛡️ Axira Verification System</h1>
-            <p class="status">✅ Server Online</p>
-            <div class="info">
-                <p><strong>Server URL:</strong> {RAILWAY_URL}</p>
-                <p><strong>Status:</strong> Active and Running</p>
-                <p><strong>Uptime:</strong> 24/7</p>
-            </div>
+        <!-- Stelline che passano -->
+        <div class="floating-star" style="top: 20%; animation-delay: 0s;">⭐</div>
+        <div class="floating-star" style="top: 50%; animation-delay: 5s;">⭐</div>
+        <div class="floating-star" style="top: 70%; animation-delay: 10s;">⭐</div>
+        
+        <!-- Barra neon principale -->
+        <div class="neon-bar">
+            <svg class="star-pfp" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                <!-- Stella -->
+                <path d="M100,20 L115,70 L165,70 L125,100 L140,150 L100,120 L60,150 L75,100 L35,70 L85,70 Z" 
+                      fill="white" stroke="black" stroke-width="2"/>
+                <!-- Occhi tristi -->
+                <ellipse cx="75" cy="85" rx="8" ry="15" fill="black"/>
+                <ellipse cx="125" cy="85" rx="8" ry="15" fill="black"/>
+                <!-- Bocca triste -->
+                <path d="M 70,120 Q 100,110 130,120" stroke="black" stroke-width="4" fill="none" stroke-linecap="round"/>
+            </svg>
+            
+            <h1>AXIRA VERIFICATION SYSTEM</h1>
+            <p class="status">✅ ONLINE</p>
         </div>
     </body>
     </html>
@@ -351,17 +406,17 @@ def callback():
         user_id = user_data['id']
         username = user_data['username']
         
-        # Add user to guild with Verified role
+        print(f"[INFO] User {username} ({user_id}) is verifying for guild {guild_id}")
+        
+        # Prova ad aggiungere l'utente al server
         headers = {
             'Authorization': f'Bot {BOT_TOKEN}',
             'Content-Type': 'application/json'
         }
         payload = {
             'access_token': access_token,
-            'roles': [str(VERIFIED_ROLE_ID)]  # Assegna il ruolo Verified
+            'roles': [str(VERIFIED_ROLE_ID)]
         }
-        
-        print(f"[DEBUG] Adding user {username} ({user_id}) to guild {guild_id} with role {VERIFIED_ROLE_ID}")
         
         r = requests.put(
             f'{API_ENDPOINT}/guilds/{guild_id}/members/{user_id}',
@@ -369,17 +424,28 @@ def callback():
             json=payload
         )
         
-        print(f"[DEBUG] Discord API response: {r.status_code}")
-        if r.status_code not in [201, 204]:
-            print(f"[DEBUG] Response content: {r.text}")
+        print(f"[INFO] PUT /members response: {r.status_code}")
         
-        # Save user data
+        # Se l'utente è già nel server (status 204 o errore), prova a dargli solo il ruolo
+        if r.status_code == 204 or r.status_code >= 400:
+            print(f"[INFO] User already in server, adding role only...")
+            r = requests.patch(
+                f'{API_ENDPOINT}/guilds/{guild_id}/members/{user_id}',
+                headers=headers,
+                json={'roles': [str(VERIFIED_ROLE_ID)]}
+            )
+            print(f"[INFO] PATCH /members response: {r.status_code}")
+        
+        # Salva i dati SEMPRE (persistente)
         if guild_id not in data["verified_users"]:
             data["verified_users"][guild_id] = []
         if user_id not in data["verified_users"][guild_id]:
             data["verified_users"][guild_id].append(user_id)
+        
         data["oauth_tokens"][user_id] = access_token
         save_data(data)
+        
+        print(f"[SUCCESS] User {username} verified and saved!")
         
         return f"""
         <!DOCTYPE html>
@@ -395,7 +461,7 @@ def callback():
                 }}
                 
                 body {{
-                    font-family: 'Segoe UI', Arial, sans-serif;
+                    font-family: Arial, sans-serif;
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                     display: flex;
                     justify-content: center;
@@ -405,7 +471,6 @@ def callback():
                     position: relative;
                 }}
                 
-                /* Particelle animate */
                 .particles {{
                     position: fixed;
                     top: 0;
@@ -413,19 +478,18 @@ def callback():
                     width: 100%;
                     height: 100%;
                     pointer-events: none;
-                    z-index: 0;
                 }}
                 
                 .particle {{
                     position: absolute;
-                    background: rgba(255, 255, 255, 0.5);
+                    background: rgba(255, 255, 255, 0.6);
                     border-radius: 50%;
-                    animation: float linear infinite;
+                    animation: float-up linear infinite;
                 }}
                 
-                @keyframes float {{
+                @keyframes float-up {{
                     0% {{
-                        transform: translateY(100vh) rotate(0deg);
+                        transform: translateY(100vh) scale(0);
                         opacity: 0;
                     }}
                     10% {{
@@ -435,14 +499,12 @@ def callback():
                         opacity: 1;
                     }}
                     100% {{
-                        transform: translateY(-100px) rotate(360deg);
+                        transform: translateY(-100px) scale(1);
                         opacity: 0;
                     }}
                 }}
                 
                 .container {{
-                    position: relative;
-                    z-index: 1;
                     background: white;
                     padding: 60px 50px;
                     border-radius: 25px;
@@ -450,16 +512,35 @@ def callback():
                     text-align: center;
                     max-width: 500px;
                     animation: slideIn 0.5s ease-out;
+                    position: relative;
+                    z-index: 10;
                 }}
                 
                 @keyframes slideIn {{
                     from {{
                         opacity: 0;
-                        transform: translateY(-50px);
+                        transform: scale(0.8);
                     }}
                     to {{
                         opacity: 1;
-                        transform: translateY(0);
+                        transform: scale(1);
+                    }}
+                }}
+                
+                .checkmark {{
+                    font-size: 120px;
+                    margin-bottom: 25px;
+                    animation: checkPop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+                }}
+                
+                @keyframes checkPop {{
+                    0% {{
+                        transform: scale(0) rotate(-180deg);
+                        opacity: 0;
+                    }}
+                    100% {{
+                        transform: scale(1) rotate(0deg);
+                        opacity: 1;
                     }}
                 }}
                 
@@ -469,81 +550,50 @@ def callback():
                     font-size: 36px;
                 }}
                 
-                p {{
-                    color: #666;
-                    font-size: 18px;
-                    line-height: 1.8;
-                    margin: 15px 0;
-                }}
-                
-                .checkmark {{
-                    font-size: 120px;
-                    color: #00d084;
-                    margin-bottom: 25px;
-                    animation: checkScale 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-                }}
-                
-                @keyframes checkScale {{
-                    0% {{
-                        transform: scale(0);
-                        opacity: 0;
-                    }}
-                    50% {{
-                        transform: scale(1.2);
-                    }}
-                    100% {{
-                        transform: scale(1);
-                        opacity: 1;
-                    }}
-                }}
-                
                 .username {{
                     font-weight: bold;
                     color: #667eea;
-                    font-size: 20px;
+                    font-size: 22px;
                 }}
                 
-                .role-info {{
+                .role-badge {{
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                     color: white;
-                    padding: 15px 25px;
+                    padding: 15px 30px;
                     border-radius: 10px;
                     margin: 25px 0;
                     font-weight: bold;
-                }}
-                
-                .close-note {{
-                    color: #999;
-                    font-size: 14px;
-                    margin-top: 30px;
+                    font-size: 18px;
+                    display: inline-block;
+                    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
                 }}
             </style>
         </head>
         <body>
-            <!-- Particelle animate -->
             <div class="particles">
-                <div class="particle" style="left: 10%; width: 3px; height: 3px; animation-duration: 8s; animation-delay: 0s;"></div>
-                <div class="particle" style="left: 20%; width: 5px; height: 5px; animation-duration: 10s; animation-delay: 1s;"></div>
-                <div class="particle" style="left: 30%; width: 4px; height: 4px; animation-duration: 12s; animation-delay: 0.5s;"></div>
-                <div class="particle" style="left: 40%; width: 6px; height: 6px; animation-duration: 9s; animation-delay: 2s;"></div>
-                <div class="particle" style="left: 50%; width: 3px; height: 3px; animation-duration: 11s; animation-delay: 1.5s;"></div>
-                <div class="particle" style="left: 60%; width: 5px; height: 5px; animation-duration: 10s; animation-delay: 0.8s;"></div>
-                <div class="particle" style="left: 70%; width: 4px; height: 4px; animation-duration: 13s; animation-delay: 1.2s;"></div>
-                <div class="particle" style="left: 80%; width: 6px; height: 6px; animation-duration: 8s; animation-delay: 0.3s;"></div>
-                <div class="particle" style="left: 90%; width: 3px; height: 3px; animation-duration: 9s; animation-delay: 1.8s;"></div>
+                <div class="particle" style="left: 10%; width: 4px; height: 4px; animation-duration: 8s; animation-delay: 0s;"></div>
+                <div class="particle" style="left: 20%; width: 6px; height: 6px; animation-duration: 10s; animation-delay: 1s;"></div>
+                <div class="particle" style="left: 30%; width: 5px; height: 5px; animation-duration: 12s; animation-delay: 0.5s;"></div>
+                <div class="particle" style="left: 40%; width: 7px; height: 7px; animation-duration: 9s; animation-delay: 2s;"></div>
+                <div class="particle" style="left: 50%; width: 4px; height: 4px; animation-duration: 11s; animation-delay: 1.5s;"></div>
+                <div class="particle" style="left: 60%; width: 6px; height: 6px; animation-duration: 10s; animation-delay: 0.8s;"></div>
+                <div class="particle" style="left: 70%; width: 5px; height: 5px; animation-duration: 13s; animation-delay: 1.2s;"></div>
+                <div class="particle" style="left: 80%; width: 7px; height: 7px; animation-duration: 8s; animation-delay: 0.3s;"></div>
+                <div class="particle" style="left: 90%; width: 4px; height: 4px; animation-duration: 9s; animation-delay: 1.8s;"></div>
             </div>
             
             <div class="container">
-                <div class="checkmark">✓</div>
+                <div class="checkmark">✅</div>
                 <h1>Verification Complete!</h1>
-                <p>Welcome to <strong>Axira</strong>, <span class="username">{username}</span>!</p>
+                <p style="font-size: 20px; color: #666; margin-bottom: 20px;">
+                    Welcome to <strong>Axira</strong>, <span class="username">{username}</span>!
+                </p>
                 
-                <div class="role-info">
-                    🎉 You received the "Verified" role!
+                <div class="role-badge">
+                    🎉 Verified Role Assigned!
                 </div>
                 
-                <p>You now have full access to all server channels and features.</p>
-                <p class="close-note">You can safely close this window and return to Discord.</p>
+                <p style="color: #999; margin-top: 30px;">You can close this window now.</p>
             </div>
         </body>
         </html>
@@ -551,38 +601,13 @@ def callback():
     except Exception as e:
         print(f"[ERROR] Verification failed: {str(e)}")
         return f"""
-        <!DOCTYPE html>
         <html>
-        <head>
-            <title>Error</title>
-            <meta charset="utf-8">
-            <style>
-                body {{
-                    font-family: Arial;
-                    text-align: center;
-                    padding: 50px;
-                    background: #f5f5f5;
-                }}
-                .error-box {{
-                    background: white;
-                    padding: 40px;
-                    border-radius: 15px;
-                    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-                    max-width: 500px;
-                    margin: 0 auto;
-                }}
-                h1 {{
-                    color: #e74c3c;
-                    margin-bottom: 20px;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="error-box">
-                <h1>❌ Verification Failed</h1>
-                <p>An error occurred during verification.</p>
-                <p style="color: #666; font-size: 14px;">Error: {str(e)}</p>
-                <p>Please try again or contact an administrator.</p>
+        <head><title>Error</title></head>
+        <body style="font-family: Arial; text-align: center; padding: 50px; background: #f5f5f5;">
+            <div style="background: white; padding: 40px; border-radius: 15px; max-width: 500px; margin: 0 auto;">
+                <h1 style="color: #e74c3c;">❌ Verification Failed</h1>
+                <p style="color: #666;">An error occurred. Please try again.</p>
+                <p style="color: #999; font-size: 12px; margin-top: 20px;">Error: {str(e)}</p>
             </div>
         </body>
         </html>
@@ -600,9 +625,7 @@ if __name__ == '__main__':
     print("🚀 Starting Axira Verification Bot")
     print(f"🌐 Server URL: {RAILWAY_URL}")
     
-    # Start Flask in background thread
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     
-    # Start Discord bot
     bot.run(BOT_TOKEN)
