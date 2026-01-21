@@ -9,7 +9,7 @@ import asyncio
 from datetime import datetime
 import threading
 
-# CONFIGURAZIONE - Le variabili vengono da Railway
+# CONFIGURAZIONE
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
@@ -48,13 +48,14 @@ data = load_data()
 
 class VerifyButton(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None)
+        super().__init__(timeout=None)  # Persistente, non scade mai
     
-    @discord.ui.button(label="✓ Verify", style=discord.ButtonStyle.gray, custom_id="verify_button")
+    @discord.ui.button(label="✓ Verify", style=discord.ButtonStyle.gray, custom_id="verify_button_persistent")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         guild_id = str(interaction.guild.id)
         
+        # Controlla se già verificato
         if guild_id in data["verified_users"] and user_id in data["verified_users"][guild_id]:
             await interaction.response.send_message("✅ You are already verified!", ephemeral=True)
             return
@@ -63,7 +64,7 @@ class VerifyButton(discord.ui.View):
         
         embed = discord.Embed(
             title="🔐 Verification Required",
-            description=f"To verify and access **Axira**, click the link below:\n\n[**Click here to verify**]({oauth_url})\n\nAfter authorizing, you will automatically receive access!",
+            description=f"To verify and access **Axira**, click the link below:\n\n[**Click here to verify**]({oauth_url})\n\nAfter authorizing, you will automatically receive the **Verified** role!",
             color=0x000000
         )
         embed.set_footer(text="Axira Verification System")
@@ -78,7 +79,7 @@ async def setupverify(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title="🛡️ Axira Verification",
-        description="Welcome to **Axira**!\n\nTo access the server and participate, verify yourself by clicking the button below.\n\n**What you'll get:**\n• Full access to all channels\n• Ability to chat and interact\n• Member benefits\n\nClick **Verify** to start!",
+        description="Welcome to **Axira**!\n\nTo access the server and participate, verify yourself by clicking the button below.\n\n**What you'll get:**\n• Full access to all channels\n• Ability to chat and interact\n• Member benefits and updates\n\nClick **Verify** to start!",
         color=0x000000
     )
     embed.set_footer(text="Axira Security System")
@@ -86,7 +87,7 @@ async def setupverify(interaction: discord.Interaction):
     
     view = VerifyButton()
     await interaction.channel.send(embed=embed, view=view)
-    await interaction.response.send_message("✅ Verification system setup!", ephemeral=True)
+    await interaction.response.send_message("✅ Verification system setup! The button will work even after bot restarts.", ephemeral=True)
 
 @tree.command(name="backup", description="Add all verified members to the server")
 async def backup(interaction: discord.Interaction):
@@ -164,7 +165,9 @@ async def backup(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
+    # Registra il view persistente - funziona anche dopo restart!
     bot.add_view(VerifyButton())
+    
     await tree.sync()
     print("="*60)
     print(f'✅ Bot online: {bot.user}')
@@ -172,6 +175,7 @@ async def on_ready():
     print(f'🌐 Server URL: {RAILWAY_URL}')
     print(f'🔗 Redirect URI: {REDIRECT_URI}')
     print(f'🔧 Commands synced!')
+    print(f'💾 Verify buttons are persistent across restarts!')
     print("="*60)
 
 # Web server routes
@@ -184,49 +188,116 @@ def home():
         <title>Axira Verification System</title>
         <meta charset="utf-8">
         <style>
+            * {{
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }}
+            
             body {{
-                font-family: Arial, sans-serif;
+                font-family: 'Segoe UI', Arial, sans-serif;
                 background: #000;
                 color: #fff;
                 display: flex;
                 justify-content: center;
                 align-items: center;
                 height: 100vh;
-                margin: 0;
+                overflow: hidden;
+                position: relative;
             }}
+            
+            /* Sfondo animato con particelle */
+            .snowflakes {{
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 0;
+            }}
+            
+            .snowflake {{
+                position: absolute;
+                top: -10px;
+                color: #fff;
+                font-size: 1em;
+                opacity: 0.8;
+                animation: fall linear infinite;
+            }}
+            
+            @keyframes fall {{
+                to {{
+                    transform: translateY(100vh);
+                }}
+            }}
+            
             .container {{
+                position: relative;
+                z-index: 1;
                 text-align: center;
-                background: #1a1a1a;
-                padding: 50px;
-                border-radius: 15px;
+                background: rgba(26, 26, 26, 0.95);
+                padding: 60px 50px;
+                border-radius: 20px;
                 border: 2px solid #333;
-                box-shadow: 0 0 30px rgba(0,255,0,0.3);
+                box-shadow: 0 0 50px rgba(0, 255, 0, 0.4);
+                backdrop-filter: blur(10px);
             }}
+            
             h1 {{
                 color: #fff;
-                margin-bottom: 20px;
-                font-size: 36px;
+                margin-bottom: 25px;
+                font-size: 42px;
+                text-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
             }}
+            
             .status {{
                 color: #00ff00;
                 font-weight: bold;
-                font-size: 24px;
-                margin: 20px 0;
+                font-size: 28px;
+                margin: 25px 0;
+                text-shadow: 0 0 15px rgba(0, 255, 0, 0.8);
+                animation: pulse 2s ease-in-out infinite;
             }}
+            
+            @keyframes pulse {{
+                0%, 100% {{ opacity: 1; }}
+                50% {{ opacity: 0.7; }}
+            }}
+            
             .info {{
                 color: #aaa;
-                font-size: 14px;
-                margin-top: 30px;
+                font-size: 15px;
+                margin-top: 35px;
+                line-height: 1.8;
+            }}
+            
+            .info p {{
+                margin: 8px 0;
             }}
         </style>
     </head>
     <body>
+        <!-- Particelle animate -->
+        <div class="snowflakes" aria-hidden="true">
+            <div class="snowflake" style="left: 10%; animation-duration: 10s; animation-delay: 0s;">❄</div>
+            <div class="snowflake" style="left: 20%; animation-duration: 8s; animation-delay: 1s;">❄</div>
+            <div class="snowflake" style="left: 30%; animation-duration: 12s; animation-delay: 0.5s;">❄</div>
+            <div class="snowflake" style="left: 40%; animation-duration: 9s; animation-delay: 2s;">❄</div>
+            <div class="snowflake" style="left: 50%; animation-duration: 11s; animation-delay: 1.5s;">❄</div>
+            <div class="snowflake" style="left: 60%; animation-duration: 10s; animation-delay: 0.8s;">❄</div>
+            <div class="snowflake" style="left: 70%; animation-duration: 13s; animation-delay: 1.2s;">❄</div>
+            <div class="snowflake" style="left: 80%; animation-duration: 8s; animation-delay: 0.3s;">❄</div>
+            <div class="snowflake" style="left: 90%; animation-duration: 9s; animation-delay: 1.8s;">❄</div>
+        </div>
+        
         <div class="container">
             <h1>🛡️ Axira Verification System</h1>
             <p class="status">✅ Server Online</p>
             <div class="info">
-                <p>Server URL: {RAILWAY_URL}</p>
-                <p>Status: Active and Running</p>
+                <p><strong>Server URL:</strong> {RAILWAY_URL}</p>
+                <p><strong>Status:</strong> Active and Running</p>
+                <p><strong>Uptime:</strong> 24/7</p>
             </div>
         </div>
     </body>
@@ -280,20 +351,27 @@ def callback():
         user_id = user_data['id']
         username = user_data['username']
         
-        # Add user to guild
+        # Add user to guild with Verified role
         headers = {
             'Authorization': f'Bot {BOT_TOKEN}',
             'Content-Type': 'application/json'
         }
         payload = {
             'access_token': access_token,
-            'roles': [str(VERIFIED_ROLE_ID)]
+            'roles': [str(VERIFIED_ROLE_ID)]  # Assegna il ruolo Verified
         }
+        
+        print(f"[DEBUG] Adding user {username} ({user_id}) to guild {guild_id} with role {VERIFIED_ROLE_ID}")
+        
         r = requests.put(
             f'{API_ENDPOINT}/guilds/{guild_id}/members/{user_id}',
             headers=headers,
             json=payload
         )
+        
+        print(f"[DEBUG] Discord API response: {r.status_code}")
+        if r.status_code not in [201, 204]:
+            print(f"[DEBUG] Response content: {r.text}")
         
         # Save user data
         if guild_id not in data["verified_users"]:
@@ -310,74 +388,202 @@ def callback():
             <title>Verification Complete</title>
             <meta charset="utf-8">
             <style>
+                * {{
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }}
+                
                 body {{
-                    font-family: Arial, sans-serif;
+                    font-family: 'Segoe UI', Arial, sans-serif;
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                     display: flex;
                     justify-content: center;
                     align-items: center;
                     height: 100vh;
-                    margin: 0;
+                    overflow: hidden;
+                    position: relative;
                 }}
+                
+                /* Particelle animate */
+                .particles {{
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    pointer-events: none;
+                    z-index: 0;
+                }}
+                
+                .particle {{
+                    position: absolute;
+                    background: rgba(255, 255, 255, 0.5);
+                    border-radius: 50%;
+                    animation: float linear infinite;
+                }}
+                
+                @keyframes float {{
+                    0% {{
+                        transform: translateY(100vh) rotate(0deg);
+                        opacity: 0;
+                    }}
+                    10% {{
+                        opacity: 1;
+                    }}
+                    90% {{
+                        opacity: 1;
+                    }}
+                    100% {{
+                        transform: translateY(-100px) rotate(360deg);
+                        opacity: 0;
+                    }}
+                }}
+                
                 .container {{
+                    position: relative;
+                    z-index: 1;
                     background: white;
-                    padding: 50px;
-                    border-radius: 20px;
-                    box-shadow: 0 15px 50px rgba(0,0,0,0.4);
+                    padding: 60px 50px;
+                    border-radius: 25px;
+                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
                     text-align: center;
-                    max-width: 450px;
+                    max-width: 500px;
+                    animation: slideIn 0.5s ease-out;
                 }}
+                
+                @keyframes slideIn {{
+                    from {{
+                        opacity: 0;
+                        transform: translateY(-50px);
+                    }}
+                    to {{
+                        opacity: 1;
+                        transform: translateY(0);
+                    }}
+                }}
+                
                 h1 {{
                     color: #667eea;
-                    margin-bottom: 20px;
-                    font-size: 32px;
+                    margin-bottom: 25px;
+                    font-size: 36px;
                 }}
+                
                 p {{
                     color: #666;
                     font-size: 18px;
                     line-height: 1.8;
+                    margin: 15px 0;
                 }}
+                
                 .checkmark {{
-                    font-size: 100px;
+                    font-size: 120px;
                     color: #00d084;
-                    margin-bottom: 20px;
-                    animation: scale 0.5s ease-in-out;
+                    margin-bottom: 25px;
+                    animation: checkScale 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
                 }}
+                
+                @keyframes checkScale {{
+                    0% {{
+                        transform: scale(0);
+                        opacity: 0;
+                    }}
+                    50% {{
+                        transform: scale(1.2);
+                    }}
+                    100% {{
+                        transform: scale(1);
+                        opacity: 1;
+                    }}
+                }}
+                
                 .username {{
                     font-weight: bold;
                     color: #667eea;
+                    font-size: 20px;
                 }}
-                @keyframes scale {{
-                    0% {{ transform: scale(0); }}
-                    50% {{ transform: scale(1.1); }}
-                    100% {{ transform: scale(1); }}
+                
+                .role-info {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 15px 25px;
+                    border-radius: 10px;
+                    margin: 25px 0;
+                    font-weight: bold;
+                }}
+                
+                .close-note {{
+                    color: #999;
+                    font-size: 14px;
+                    margin-top: 30px;
                 }}
             </style>
         </head>
         <body>
+            <!-- Particelle animate -->
+            <div class="particles">
+                <div class="particle" style="left: 10%; width: 3px; height: 3px; animation-duration: 8s; animation-delay: 0s;"></div>
+                <div class="particle" style="left: 20%; width: 5px; height: 5px; animation-duration: 10s; animation-delay: 1s;"></div>
+                <div class="particle" style="left: 30%; width: 4px; height: 4px; animation-duration: 12s; animation-delay: 0.5s;"></div>
+                <div class="particle" style="left: 40%; width: 6px; height: 6px; animation-duration: 9s; animation-delay: 2s;"></div>
+                <div class="particle" style="left: 50%; width: 3px; height: 3px; animation-duration: 11s; animation-delay: 1.5s;"></div>
+                <div class="particle" style="left: 60%; width: 5px; height: 5px; animation-duration: 10s; animation-delay: 0.8s;"></div>
+                <div class="particle" style="left: 70%; width: 4px; height: 4px; animation-duration: 13s; animation-delay: 1.2s;"></div>
+                <div class="particle" style="left: 80%; width: 6px; height: 6px; animation-duration: 8s; animation-delay: 0.3s;"></div>
+                <div class="particle" style="left: 90%; width: 3px; height: 3px; animation-duration: 9s; animation-delay: 1.8s;"></div>
+            </div>
+            
             <div class="container">
                 <div class="checkmark">✓</div>
                 <h1>Verification Complete!</h1>
                 <p>Welcome to <strong>Axira</strong>, <span class="username">{username}</span>!</p>
-                <p>You now have full access to the server.</p>
-                <p style="color: #999; font-size: 14px; margin-top: 30px;">You can safely close this window.</p>
+                
+                <div class="role-info">
+                    🎉 You received the "Verified" role!
+                </div>
+                
+                <p>You now have full access to all server channels and features.</p>
+                <p class="close-note">You can safely close this window and return to Discord.</p>
             </div>
         </body>
         </html>
         """
     except Exception as e:
+        print(f"[ERROR] Verification failed: {str(e)}")
         return f"""
         <!DOCTYPE html>
         <html>
         <head>
             <title>Error</title>
             <meta charset="utf-8">
+            <style>
+                body {{
+                    font-family: Arial;
+                    text-align: center;
+                    padding: 50px;
+                    background: #f5f5f5;
+                }}
+                .error-box {{
+                    background: white;
+                    padding: 40px;
+                    border-radius: 15px;
+                    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+                    max-width: 500px;
+                    margin: 0 auto;
+                }}
+                h1 {{
+                    color: #e74c3c;
+                    margin-bottom: 20px;
+                }}
+            </style>
         </head>
-        <body style="font-family: Arial; text-align: center; padding: 50px; background: #f5f5f5;">
-            <h1 style="color: #e74c3c;">❌ Verification Failed</h1>
-            <p style="color: #666;">An error occurred during verification.</p>
-            <p style="color: #999; font-size: 14px;">Error: {str(e)}</p>
-            <p>Please try again or contact an administrator.</p>
+        <body>
+            <div class="error-box">
+                <h1>❌ Verification Failed</h1>
+                <p>An error occurred during verification.</p>
+                <p style="color: #666; font-size: 14px;">Error: {str(e)}</p>
+                <p>Please try again or contact an administrator.</p>
+            </div>
         </body>
         </html>
         """, 500
@@ -391,7 +597,7 @@ def run_flask():
     app.run(host='0.0.0.0', port=port)
 
 if __name__ == '__main__':
-    print("🚀 Starting Axira Verification Bot on Railway")
+    print("🚀 Starting Axira Verification Bot")
     print(f"🌐 Server URL: {RAILWAY_URL}")
     
     # Start Flask in background thread
