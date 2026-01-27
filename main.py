@@ -3,36 +3,24 @@ from discord import app_commands
 from discord.ext import commands
 from flask import Flask, request, redirect
 import requests
+import json
 import os
 import asyncio
 from datetime import datetime
 import threading
-from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
 
 # CONFIGURAZIONE
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 RAILWAY_URL = os.environ.get("RAILWAY_URL", "https://your-app.railway.app")
-MONGODB_URI = os.environ.get("MONGODB_URI")
 
 REDIRECT_URI = f"{RAILWAY_URL}/callback"
 
 VERIFIED_ROLE_ID = 1271405086047993901
 ADMIN_ID = 1129411746495463467
+DATA_FILE = "bot_data.json"
 API_ENDPOINT = "https://discord.com/api/v10"
-
-# MongoDB setup
-try:
-    mongo_client = MongoClient(MONGODB_URI)
-    db = mongo_client.axira_bot
-    verified_collection = db.verified_users
-    tokens_collection = db.oauth_tokens
-    print("✅ MongoDB connected successfully!")
-except ConnectionFailure as e:
-    print(f"❌ MongoDB connection failed: {e}")
-    mongo_client = None
 
 # Bot setup
 intents = discord.Intents.default()
@@ -46,57 +34,17 @@ tree = bot.tree
 # Flask setup
 app = Flask(__name__)
 
-def save_verified_user(guild_id: str, user_id: str):
-    """Salva utente verificato nel database"""
-    try:
-        verified_collection.update_one(
-            {"guild_id": guild_id, "user_id": user_id},
-            {"$set": {"guild_id": guild_id, "user_id": user_id, "verified_at": datetime.utcnow()}},
-            upsert=True
-        )
-        return True
-    except Exception as e:
-        print(f"[ERROR] Failed to save verified user: {e}")
-        return False
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, 'r') as f:
+            return json.load(f)
+    return {"verified_users": {}, "oauth_tokens": {}}
 
-def save_oauth_token(user_id: str, access_token: str):
-    """Salva token OAuth2 nel database"""
-    try:
-        tokens_collection.update_one(
-            {"user_id": user_id},
-            {"$set": {"user_id": user_id, "access_token": access_token, "updated_at": datetime.utcnow()}},
-            upsert=True
-        )
-        return True
-    except Exception as e:
-        print(f"[ERROR] Failed to save token: {e}")
-        return False
+def save_data(data):
+    with open(DATA_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
 
-def get_verified_users(guild_id: str):
-    """Ottieni tutti gli utenti verificati di un server"""
-    try:
-        users = list(verified_collection.find({"guild_id": guild_id}))
-        return [user["user_id"] for user in users]
-    except Exception as e:
-        print(f"[ERROR] Failed to get verified users: {e}")
-        return []
-
-def get_oauth_token(user_id: str):
-    """Ottieni token OAuth2 di un utente"""
-    try:
-        token_doc = tokens_collection.find_one({"user_id": user_id})
-        return token_doc["access_token"] if token_doc else None
-    except Exception as e:
-        print(f"[ERROR] Failed to get token: {e}")
-        return None
-
-def is_user_verified(guild_id: str, user_id: str):
-    """Controlla se un utente è verificato"""
-    try:
-        return verified_collection.find_one({"guild_id": guild_id, "user_id": user_id}) is not None
-    except Exception as e:
-        print(f"[ERROR] Failed to check verification: {e}")
-        return False
+data = load_data()
 
 def is_user_in_guild(guild_id: str, user_id: str) -> bool:
     """Controlla se un utente è nel server"""
@@ -121,7 +69,7 @@ class VerifyButton(discord.ui.View):
         guild_id = str(interaction.guild.id)
         
         # Controlla se già verificato
-        if is_user_verified(guild_id, user_id):
+        if guild_id in data["verified_users"] and user_id in data["verified_users"][guild_id]:
             await interaction.response.send_message("✅ You are already verified!", ephemeral=True)
             return
         
@@ -161,7 +109,7 @@ async def verified(interaction: discord.Interaction):
         return
     
     guild_id = str(interaction.guild.id)
-    verified_users_list = get_verified_users(guild_id)
+    verified_users_list = data["verified_users"].get(guild_id, [])
     
     if not verified_users_list:
         await interaction.response.send_message("❌ No verified users found!", ephemeral=True)
@@ -169,6 +117,7 @@ async def verified(interaction: discord.Interaction):
     
     total = len(verified_users_list)
     
+    # Mostra messaggio di loading
     embed = discord.Embed(
         title="📊 Checking Verified Members...",
         description="Please wait, checking server members...",
@@ -177,6 +126,7 @@ async def verified(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
     message = await interaction.original_response()
     
+    # Controlla quanti sono ancora nel server
     in_server = 0
     left_server = 0
     
@@ -185,8 +135,11 @@ async def verified(interaction: discord.Interaction):
             in_server += 1
         else:
             left_server += 1
+        
+        # Pausa per evitare rate limit
         await asyncio.sleep(0.3)
     
+    # Crea l'embed finale
     embed = discord.Embed(
         title="📊 Verified Members Statistics",
         description="Complete statistics of verified members",
@@ -211,6 +164,7 @@ async def verified(interaction: discord.Interaction):
         inline=True
     )
     
+    # Calcola percentuale
     percentage = (in_server / total * 100) if total > 0 else 0
     
     embed.add_field(
@@ -219,7 +173,7 @@ async def verified(interaction: discord.Interaction):
         inline=False
     )
     
-    embed.set_footer(text=f"Axira • {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    embed.set_footer(text=f"Axira Verification System • {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
     
     await message.edit(embed=embed)
 
@@ -230,7 +184,7 @@ async def backup(interaction: discord.Interaction):
         return
     
     guild_id = str(interaction.guild.id)
-    verified_users_list = get_verified_users(guild_id)
+    verified_users_list = data["verified_users"].get(guild_id, [])
     
     if not verified_users_list:
         await interaction.response.send_message("❌ No verified users found!", ephemeral=True)
@@ -240,7 +194,7 @@ async def backup(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title="🔄 Backup in Progress",
-        description=f"**Progress:** 0/{total} processed\n\n**✅ Joined:** 0\n**📍 Already in server:** 0\n**❌ Failed:** 0",
+        description=f"**Progress:** 0/{total} processed\n\n**Joined:** 0\n**Already in server:** 0\n**Failed:** 0",
         color=0x3498DB
     )
     
@@ -252,11 +206,13 @@ async def backup(interaction: discord.Interaction):
     failed = 0
     
     for i, user_id in enumerate(verified_users_list):
-        access_token = get_oauth_token(user_id)
+        access_token = data["oauth_tokens"].get(user_id)
         
+        # Controlla se l'utente è già nel server
         is_in_server = is_user_in_guild(guild_id, user_id)
         
         if is_in_server:
+            # Utente già nel server, prova solo ad aggiungere il ruolo
             already_in += 1
             
             headers = {
@@ -278,6 +234,7 @@ async def backup(interaction: discord.Interaction):
                 print(f"[ERROR] Role assignment failed for {user_id}: {e}")
         
         elif access_token:
+            # Utente non nel server, prova ad aggiungerlo
             headers = {
                 'Authorization': f'Bot {BOT_TOKEN}',
                 'Content-Type': 'application/json'
@@ -309,6 +266,7 @@ async def backup(interaction: discord.Interaction):
         
         await asyncio.sleep(1)
         
+        # Aggiorna ogni 5 utenti o all'ultimo
         if (i + 1) % 5 == 0 or (i + 1) == total:
             progress = i + 1
             embed.description = (
@@ -319,6 +277,7 @@ async def backup(interaction: discord.Interaction):
             )
             await message.edit(embed=embed)
     
+    # Messaggio finale
     embed.color = 0x00FF00
     embed.title = "✅ Backup Complete"
     
@@ -336,28 +295,26 @@ async def backup(interaction: discord.Interaction):
     
     await message.edit(embed=embed)
 
+# Variabile per tracciare se il view è già stato aggiunto
 view_added = False
 
 @bot.event
 async def on_ready():
     global view_added
     
+    # Aggiungi il view SOLO UNA VOLTA
     if not view_added:
         bot.add_view(VerifyButton())
         view_added = True
     
     await tree.sync()
-    
-    # Conta utenti verificati
-    total_verified = verified_collection.count_documents({})
-    
     print("="*60)
     print(f'✅ Bot online: {bot.user}')
     print(f'📝 Bot ID: {bot.user.id}')
     print(f'🌐 Server URL: {RAILWAY_URL}')
     print(f'🔗 Redirect URI: {REDIRECT_URI}')
     print(f'🔧 Commands synced!')
-    print(f'💾 Total verified users in database: {total_verified}')
+    print(f'💾 Verified users saved: {sum(len(users) for users in data["verified_users"].values())}')
     print("="*60)
 
 # Web server routes
@@ -388,6 +345,7 @@ def home():
                 position: relative;
             }
             
+            /* Neve animata */
             .snowflake {
                 position: absolute;
                 top: -10px;
@@ -404,6 +362,7 @@ def home():
                 }
             }
             
+            /* Barra neon */
             .neon-bar {
                 position: absolute;
                 top: 50%;
@@ -474,6 +433,7 @@ def home():
                 text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
             }
             
+            /* Stelline che passano */
             .floating-star {
                 position: absolute;
                 font-size: 40px;
@@ -495,6 +455,7 @@ def home():
         </style>
     </head>
     <body>
+        <!-- Neve -->
         <div class="snowflake" style="left: 10%; animation-duration: 10s; animation-delay: 0s;">❄</div>
         <div class="snowflake" style="left: 20%; animation-duration: 8s; animation-delay: 1s;">❄</div>
         <div class="snowflake" style="left: 30%; animation-duration: 12s; animation-delay: 0.5s;">❄</div>
@@ -505,16 +466,21 @@ def home():
         <div class="snowflake" style="left: 80%; animation-duration: 8s; animation-delay: 0.3s;">❄</div>
         <div class="snowflake" style="left: 90%; animation-duration: 9s; animation-delay: 1.8s;">❄</div>
         
+        <!-- Stelline che passano -->
         <div class="floating-star" style="top: 20%; animation-delay: 0s;">⭐</div>
         <div class="floating-star" style="top: 50%; animation-delay: 5s;">⭐</div>
         <div class="floating-star" style="top: 70%; animation-delay: 10s;">⭐</div>
         
+        <!-- Barra neon principale -->
         <div class="neon-bar">
             <svg class="star-pfp" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                <!-- Stella -->
                 <path d="M100,20 L115,70 L165,70 L125,100 L140,150 L100,120 L60,150 L75,100 L35,70 L85,70 Z" 
                       fill="white" stroke="black" stroke-width="2"/>
+                <!-- Occhi tristi -->
                 <ellipse cx="75" cy="85" rx="8" ry="15" fill="black"/>
                 <ellipse cx="125" cy="85" rx="8" ry="15" fill="black"/>
+                <!-- Bocca triste -->
                 <path d="M 70,120 Q 100,110 130,120" stroke="black" stroke-width="4" fill="none" stroke-linecap="round"/>
             </svg>
             
@@ -549,6 +515,7 @@ def callback():
         return "❌ Authorization failed!", 400
     
     try:
+        # Exchange code for access token
         token_data = {
             'client_id': CLIENT_ID,
             'client_secret': CLIENT_SECRET,
@@ -563,6 +530,7 @@ def callback():
         token_response = r.json()
         access_token = token_response['access_token']
         
+        # Get user info
         headers = {'Authorization': f'Bearer {access_token}'}
         r = requests.get(f'{API_ENDPOINT}/users/@me', headers=headers)
         r.raise_for_status()
@@ -570,8 +538,9 @@ def callback():
         user_id = user_data['id']
         username = user_data['username']
         
-        print(f"[INFO] User {username} ({user_id}) verifying for guild {guild_id}")
+        print(f"[INFO] User {username} ({user_id}) is verifying for guild {guild_id}")
         
+        # Prova ad aggiungere l'utente al server
         headers = {
             'Authorization': f'Bot {BOT_TOKEN}',
             'Content-Type': 'application/json'
@@ -587,22 +556,28 @@ def callback():
             json=payload
         )
         
-        print(f"[INFO] PUT /members: {r.status_code}")
+        print(f"[INFO] PUT /members response: {r.status_code}")
         
+        # Se l'utente è già nel server (status 204 o errore), prova a dargli solo il ruolo
         if r.status_code == 204 or r.status_code >= 400:
-            print(f"[INFO] User in server, adding role...")
+            print(f"[INFO] User already in server, adding role only...")
             r = requests.patch(
                 f'{API_ENDPOINT}/guilds/{guild_id}/members/{user_id}',
                 headers=headers,
                 json={'roles': [str(VERIFIED_ROLE_ID)]}
             )
-            print(f"[INFO] PATCH /members: {r.status_code}")
+            print(f"[INFO] PATCH /members response: {r.status_code}")
         
-        # Salva nel database MongoDB
-        save_verified_user(guild_id, user_id)
-        save_oauth_token(user_id, access_token)
+        # Salva i dati SEMPRE (persistente) - NON ELIMINA DATI VECCHI!
+        if guild_id not in data["verified_users"]:
+            data["verified_users"][guild_id] = []
+        if user_id not in data["verified_users"][guild_id]:
+            data["verified_users"][guild_id].append(user_id)
         
-        print(f"[SUCCESS] User {username} verified and saved to MongoDB!")
+        data["oauth_tokens"][user_id] = access_token
+        save_data(data)
+        
+        print(f"[SUCCESS] User {username} verified and saved!")
         
         return f"""
         <!DOCTYPE html>
@@ -779,7 +754,7 @@ def run_flask():
     app.run(host='0.0.0.0', port=port)
 
 if __name__ == '__main__':
-    print("🚀 Starting Axira Verification Bot with MongoDB")
+    print("🚀 Starting Axira Verification Bot")
     print(f"🌐 Server URL: {RAILWAY_URL}")
     
     flask_thread = threading.Thread(target=run_flask, daemon=True)
