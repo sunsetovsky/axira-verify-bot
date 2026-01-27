@@ -46,6 +46,19 @@ def save_data(data):
 
 data = load_data()
 
+def is_user_in_guild(guild_id: str, user_id: str) -> bool:
+    """Controlla se un utente è nel server"""
+    try:
+        headers = {'Authorization': f'Bot {BOT_TOKEN}'}
+        r = requests.get(
+            f'{API_ENDPOINT}/guilds/{guild_id}/members/{user_id}',
+            headers=headers,
+            timeout=5
+        )
+        return r.status_code == 200
+    except:
+        return False
+
 class VerifyButton(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -89,6 +102,81 @@ async def setupverify(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("✅ Verification system setup complete!", ephemeral=True)
 
+@tree.command(name="verified", description="Show verified members statistics")
+async def verified(interaction: discord.Interaction):
+    if interaction.user.id != ADMIN_ID:
+        await interaction.response.send_message("❌ You don't have permission!", ephemeral=True)
+        return
+    
+    guild_id = str(interaction.guild.id)
+    verified_users_list = data["verified_users"].get(guild_id, [])
+    
+    if not verified_users_list:
+        await interaction.response.send_message("❌ No verified users found!", ephemeral=True)
+        return
+    
+    total = len(verified_users_list)
+    
+    # Mostra messaggio di loading
+    embed = discord.Embed(
+        title="📊 Checking Verified Members...",
+        description="Please wait, checking server members...",
+        color=0x3498DB
+    )
+    await interaction.response.send_message(embed=embed)
+    message = await interaction.original_response()
+    
+    # Controlla quanti sono ancora nel server
+    in_server = 0
+    left_server = 0
+    
+    for user_id in verified_users_list:
+        if is_user_in_guild(guild_id, user_id):
+            in_server += 1
+        else:
+            left_server += 1
+        
+        # Pausa per evitare rate limit
+        await asyncio.sleep(0.3)
+    
+    # Crea l'embed finale
+    embed = discord.Embed(
+        title="📊 Verified Members Statistics",
+        description="Complete statistics of verified members",
+        color=0x00FF00
+    )
+    
+    embed.add_field(
+        name="📝 Total Verified",
+        value=f"**{total}** members",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="✅ In Server",
+        value=f"**{in_server}** members",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="❌ Left Server",
+        value=f"**{left_server}** members",
+        inline=True
+    )
+    
+    # Calcola percentuale
+    percentage = (in_server / total * 100) if total > 0 else 0
+    
+    embed.add_field(
+        name="📈 Retention Rate",
+        value=f"**{percentage:.1f}%**",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"Axira Verification System • {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    
+    await message.edit(embed=embed)
+
 @tree.command(name="backup", description="Add all verified members to the server")
 async def backup(interaction: discord.Interaction):
     if interaction.user.id != ADMIN_ID:
@@ -106,7 +194,7 @@ async def backup(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title="🔄 Backup in Progress",
-        description=f"**Progress:** 0/{total} joined the discord server",
+        description=f"**Progress:** 0/{total} processed\n\n**Joined:** 0\n**Already in server:** 0\n**Failed:** 0",
         color=0x3498DB
     )
     
@@ -114,12 +202,39 @@ async def backup(interaction: discord.Interaction):
     message = await interaction.original_response()
     
     joined = 0
+    already_in = 0
     failed = 0
     
     for i, user_id in enumerate(verified_users_list):
         access_token = data["oauth_tokens"].get(user_id)
         
-        if access_token:
+        # Controlla se l'utente è già nel server
+        is_in_server = is_user_in_guild(guild_id, user_id)
+        
+        if is_in_server:
+            # Utente già nel server, prova solo ad aggiungere il ruolo
+            already_in += 1
+            
+            headers = {
+                'Authorization': f'Bot {BOT_TOKEN}',
+                'Content-Type': 'application/json'
+            }
+            
+            try:
+                r = requests.patch(
+                    f'{API_ENDPOINT}/guilds/{guild_id}/members/{user_id}',
+                    headers=headers,
+                    json={'roles': [str(VERIFIED_ROLE_ID)]},
+                    timeout=10
+                )
+                
+                if r.status_code not in [200, 204]:
+                    print(f"[WARN] Could not add role to user {user_id}: {r.status_code}")
+            except Exception as e:
+                print(f"[ERROR] Role assignment failed for {user_id}: {e}")
+        
+        elif access_token:
+            # Utente non nel server, prova ad aggiungerlo
             headers = {
                 'Authorization': f'Bot {BOT_TOKEN}',
                 'Content-Type': 'application/json'
@@ -142,24 +257,41 @@ async def backup(interaction: discord.Interaction):
                     joined += 1
                 else:
                     failed += 1
-            except:
+                    print(f"[WARN] Failed to add user {user_id}: {r.status_code}")
+            except Exception as e:
                 failed += 1
+                print(f"[ERROR] Failed to add user {user_id}: {e}")
         else:
             failed += 1
         
         await asyncio.sleep(1)
         
-        if (i + 1) % 10 == 0 or (i + 1) == total:
-            embed.description = f"**Progress:** {joined}/{total} joined the discord server"
+        # Aggiorna ogni 5 utenti o all'ultimo
+        if (i + 1) % 5 == 0 or (i + 1) == total:
+            progress = i + 1
+            embed.description = (
+                f"**Progress:** {progress}/{total} processed\n\n"
+                f"**✅ Joined:** {joined}\n"
+                f"**📍 Already in server:** {already_in}\n"
+                f"**❌ Failed:** {failed}"
+            )
             await message.edit(embed=embed)
     
-    embed.color = 0x00FF00 if joined >= total * 0.5 else 0xFFA500
+    # Messaggio finale
+    embed.color = 0x00FF00
     embed.title = "✅ Backup Complete"
     
+    summary_lines = [
+        f"**Total processed:** {total} members",
+        f"**✅ Successfully joined:** {joined} members",
+        f"**📍 Already in server:** {already_in} members"
+    ]
+    
     if failed > 0:
-        embed.description = f"**Result:** {joined}/{total} members joined!\n⚠️ {failed} failed (expired tokens or already in server)"
-    else:
-        embed.description = f"**Result:** {joined}/{total} members joined successfully!"
+        summary_lines.append(f"**❌ Failed:** {failed} members (expired tokens or errors)")
+    
+    embed.description = "\n".join(summary_lines)
+    embed.set_footer(text="Backup completed successfully")
     
     await message.edit(embed=embed)
 
@@ -436,7 +568,7 @@ def callback():
             )
             print(f"[INFO] PATCH /members response: {r.status_code}")
         
-        # Salva i dati SEMPRE (persistente)
+        # Salva i dati SEMPRE (persistente) - NON ELIMINA DATI VECCHI!
         if guild_id not in data["verified_users"]:
             data["verified_users"][guild_id] = []
         if user_id not in data["verified_users"][guild_id]:
